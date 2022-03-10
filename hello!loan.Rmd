@@ -1,0 +1,221 @@
+---
+title: "Practice makes me perfect"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(MASS)
+library(visreg)
+library(brglm)
+library(car)
+library(mgcv)
+library(unbalanced)
+library(multcomp)
+library(DescTools)
+library(ggplot2)
+library(ROCR)
+library(InformationValue)
+library(brant)
+library(VGAM)
+library(nnet)
+```
+
+```{r}
+data <- read.csv('/Users/surabhisood/Downloads/loan_data.csv')
+```
+
+
+```{r}
+#dropping NA columns
+#drop int_rate2 and int_rate3 as they are the same as int_rate
+
+data <- data%>%
+  select(-wtd_loans,
+         -interest_rate,
+         -num_rate,
+         -numrate,
+         -int_rate2,
+         -int_rate3,
+         -loan_amnt,#same as funded_amnt
+         -earliest_cr_line, #date
+         -mths_since_last_delinq) #50%missing
+```
+
+
+```{r}
+summary(data)
+```
+
+```{r}
+# exploring the variables
+
+continous <- c('funded_amnt','int_rate','installment',
+               'annual_inc','dti','delinq_2yrs','open_acc','revol_bal',
+               'total_acc','out_prncp','total_pymnt','total_rec_prncp','total_rec_int')
+
+categorical <- c('term','emp_length','home_ownership','purpose','addr_state')
+```
+
+
+```{r}
+#dropping NA rows
+library
+data <- data%>%
+  drop_na()
+
+```
+
+```{r}
+#creating target variable
+unique(data$loan_status)
+```
+
+```{r}
+# changing loan status to good-0/bad-1, sub-setting the data-set and dropping loan status
+
+df <- data
+df$outcome <- ifelse(df$loan_status=="Fully Paid",0,
+                     ifelse(df$loan_status== "Default",1,
+                     ifelse(df$loan_status=="Charged Off",1 , 9)))
+
+
+df <- df%>%
+  select(-loan_status)
+
+# based on outcome values
+new_data <- df%>%
+  filter(outcome==1 | outcome==0)
+
+```
+
+
+```{r}
+#checking for rare event
+prop.table(table(new_data$outcome))
+#all cool
+```
+
+```{r}
+#separation concerns check
+#flag variables that have separation issues
+
+for (x in categorical){
+  print(x)
+  print(table(new_data$outcome, new_data[[x]]))
+}
+
+```
+
+
+```{r}
+#fixing separation concerns and dropping state (bias??)
+
+new_data$purpose[which(new_data$purpose == 'car')] <- "other"
+new_data$purpose[which(new_data$purpose == 'moving')] <- "other"
+new_data$purpose[which(new_data$purpose == 'renewable_energy')] <- "other"
+```
+
+
+```{r}
+#split the dataset into train and test
+
+set.seed(123)
+train <- new_data %>% sample_frac(0.7)
+test <- anti_join(new_data, train, by = 'id')
+```
+
+
+```{r}
+full.model <- glm(outcome ~ . 
+                  -id 
+                  -addr_state
+                  -total_pymnt
+                  -total_rec_prncp
+                  -out_prncp,
+                  data = train, 
+                  family = binomial(link = "logit"))
+
+```
+
+
+```{r}
+summary(full.model)
+```
+
+
+```{r}
+#stepwise selection
+
+empty.model <- glm(outcome ~ 1,
+                  data = train, 
+                  family = binomial(link = "logit"))
+
+# k = 2 for AIC selection
+step.model <- step(empty.model,
+                  scope = list(lower = empty.model,
+                               upper = full.model),
+                  direction = "both", k = 2) 
+```
+```{r}
+#final model
+final.model <- glm(outcome ~ int_rate + annual_inc + total_acc + 
+                     dti + delinq_2yrs + funded_amnt, 
+                   data = test,
+                   family = binomial(link = "logit"))
+                   
+                   
+```
+
+```{r}
+summary(final.model)
+```
+```{r}
+# Model Assessment on train subset
+
+train$p_hat <- predict(step.model, type = "response") 
+plotROC(train$outcome, train$p_hat)
+
+```
+
+```{r}
+
+# Model Assessment on test subset
+test$p_hat <- predict(final.model, type = "response") 
+plotROC(test$outcome, test$p_hat)
+
+```
+```{r}
+#Precision, Recall, 𝐹 1
+sens <- NULL
+spec <- NULL
+youden <- NULL
+cutoff <- NULL
+reca <- NULL
+prec <- NULL
+f1 <- NULL
+
+
+for(i in 1:49){
+cutoff = c(cutoff, i/50)
+reca <- c(reca, InformationValue::sensitivity(test$outcome, test$p_hat, threshold = i/50)) 
+prec <- c(prec, InformationValue::precision(test$outcome, test$p_hat, threshold = i/50)) 
+f1 <- c(f1, 2*((prec[i]*reca[i])/(prec[i] + reca[i])))
+
+}
+
+ctable <- data.frame(cutoff, reca, prec, f1) 
+print(ctable[order(-f1),])
+```
+```{r}
+# recal = 0.79, TP/(TP+FN) - Recall measures how good our model is at correctly predicting positive classes.
+# so in this case we want to find people who might default (event happening = 1). This model is good at correctly predicting the default/charged off people
+```
+
+
+#Predictive model
+```{r}
+
+```
+
+

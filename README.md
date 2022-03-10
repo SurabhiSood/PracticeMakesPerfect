@@ -1,3 +1,3 @@
 # Project Description
 
-## Data Used : 
+## Data Used : 28 predicter variables with 

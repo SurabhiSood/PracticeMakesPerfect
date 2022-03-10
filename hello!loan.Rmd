@@ -27,11 +27,14 @@ data <- read.csv('/Users/surabhisood/Downloads/loan_data.csv')
 
 
 ```{r}
+summary(data)
+```
+
+```{r}
 #dropping NA columns
 #drop int_rate2 and int_rate3 as they are the same as int_rate
 
-data <- data%>%
-  select(-wtd_loans,
+data <- subset(data, select = c(-wtd_loans,
          -interest_rate,
          -num_rate,
          -numrate,
@@ -39,13 +42,11 @@ data <- data%>%
          -int_rate3,
          -loan_amnt,#same as funded_amnt
          -earliest_cr_line, #date
-         -mths_since_last_delinq) #50%missing
-```
+         -mths_since_last_delinq)) #50%missing
 
 
-```{r}
-summary(data)
 ```
+
 
 ```{r}
 # exploring the variables
@@ -79,9 +80,7 @@ df$outcome <- ifelse(df$loan_status=="Fully Paid",0,
                      ifelse(df$loan_status== "Default",1,
                      ifelse(df$loan_status=="Charged Off",1 , 9)))
 
-
-df <- df%>%
-  select(-loan_status)
+df <- subset(df, select = -c(loan_status))
 
 # based on outcome values
 new_data <- df%>%
@@ -138,6 +137,10 @@ full.model <- glm(outcome ~ .
 
 ```
 
+```{r}
+vif(full.model)
+```
+
 
 ```{r}
 summary(full.model)
@@ -157,19 +160,12 @@ step.model <- step(empty.model,
                                upper = full.model),
                   direction = "both", k = 2) 
 ```
-```{r}
-#final model
-final.model <- glm(outcome ~ int_rate + annual_inc + total_acc + 
-                     dti + delinq_2yrs + funded_amnt, 
-                   data = test,
-                   family = binomial(link = "logit"))
-                   
-                   
-```
 
 ```{r}
-summary(final.model)
+#outcome ~ int_rate + annual_inc + total_acc + dti + delinq_2yrs + funded_amnt
+summary(step.model)
 ```
+
 ```{r}
 # Model Assessment on train subset
 
@@ -181,10 +177,12 @@ plotROC(train$outcome, train$p_hat)
 ```{r}
 
 # Model Assessment on test subset
-test$p_hat <- predict(final.model, type = "response") 
+test$p_hat <- predict(step.model, newdata=test, type = "response") 
 plotROC(test$outcome, test$p_hat)
 
 ```
+
+
 ```{r}
 #Precision, Recall, 𝐹 1
 sens <- NULL
@@ -196,7 +194,7 @@ prec <- NULL
 f1 <- NULL
 
 
-for(i in 1:49){
+for(i in 1:20){
 cutoff = c(cutoff, i/50)
 reca <- c(reca, InformationValue::sensitivity(test$outcome, test$p_hat, threshold = i/50)) 
 prec <- c(prec, InformationValue::precision(test$outcome, test$p_hat, threshold = i/50)) 
@@ -210,10 +208,15 @@ print(ctable[order(-f1),])
 ```{r}
 # recal = 0.79, TP/(TP+FN) - Recall measures how good our model is at correctly predicting positive classes.
 # so in this case we want to find people who might default (event happening = 1). This model is good at correctly predicting the default/charged off people
+
+#
+# 1. what is cut-off?
+# 2. Whats the cut-off loop and why is i divided by 50
+# 3. Interpretation of the model
+# 4. Bar charts
 ```
 
 
-#Predictive model
 ```{r}
 
 ```
